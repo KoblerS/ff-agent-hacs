@@ -1,0 +1,5 @@
+DOMAIN = "ffagent_connector"
+BASE_URL = "https://api-v1.ff-agent.com"
+USER_AGENT = "FFAgent/2.0.0 (iPhone; iOS 18.5; Scale/3.00)"
+CONF_USERNAME = "Benutzername"
+CONF_PASSWORD = "Passwort"

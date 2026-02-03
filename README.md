@@ -19,7 +19,7 @@
 
 1. Stelle sicher, dass [HACS](https://hacs.xyz/) in deinem Home Assistant installiert ist.
 2. Öffne HACS → **Integrationen** → Menü (oben rechts) → **Benutzerdefiniertes Repository hinzufügen**.
-3. Gib folgendes GitHub-Repository ein: [https://github.com/KoblerS/hacs-ffagent-connector](https://github.com/KoblerS/hacs-ffagent-connector) wähle als Typ: **Integration**
+3. Gib folgendes GitHub-Repository ein: [https://github.com/KoblerS/ff-agent-hacs](https://github.com/KoblerS/ff-agent-hacs) wähle als Typ: **Integration**
 4. Suche nach "FF-Agent Connector" und installiere die Integration.
 5. Starte Home Assistant neu.
 

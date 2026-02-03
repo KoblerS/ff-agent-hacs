@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from custom_components.ffagent_connector.coordinator import FFAgentDataCoordinator
-from custom_components.ffagent_connector.sensor_entity import FFAgentStatusSensor
+from custom_components.ffagent_connector.sensor_entity import create_ffagent_sensors
 from .const import BASE_URL, USER_AGENT, CONF_USERNAME, CONF_PASSWORD
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
   coordinator = FFAgentDataCoordinator(hass, entry)
   await coordinator.async_config_entry_first_refresh()
-  async_add_entities([FFAgentStatusSensor(coordinator, entry)])
+  async_add_entities(create_ffagent_sensors(coordinator, entry))
 
 async def get_active_mission_status(hass: HomeAssistant, entry: ConfigEntry) -> dict:
   """Hole den Status der aktiven Mission von der FF-Agent API, erneuere Token automatisch bei Ablauf."""

@@ -1,8 +1,10 @@
 {
-  "codeowners": ["@KoblerS"],
+  "codeowners": [
+    "@KoblerS"
+  ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/KoblerS/hacs-ffagent-connector",
+  "documentation": "https://github.com/KoblerS/ff-agent-hacs",
   "domain": "ffagent_connector",
   "iot_class": "calculated",
   "name": "FF-Agent Connector",

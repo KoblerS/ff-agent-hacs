@@ -13,18 +13,18 @@ async def test_async_setup_entry_adds_entity():
   async_add_entities = AsyncMock()
 
   with patch("custom_components.ffagent_connector.sensor.FFAgentDataCoordinator") as MockCoordinator, \
-    patch("custom_components.ffagent_connector.sensor.FFAgentStatusSensor") as MockSensor:
+    patch("custom_components.ffagent_connector.sensor.create_ffagent_sensors") as MockFactory:
     coordinator_instance = AsyncMock()
     MockCoordinator.return_value = coordinator_instance
-    sensor_instance = MagicMock()
-    MockSensor.return_value = sensor_instance
+    sensor_instances = [MagicMock(), MagicMock()]
+    MockFactory.return_value = sensor_instances
 
     await async_setup_entry(hass, entry, async_add_entities)
 
     MockCoordinator.assert_called_once_with(hass, entry)
     coordinator_instance.async_config_entry_first_refresh.assert_awaited_once()
-    MockSensor.assert_called_once_with(coordinator_instance, entry)
-    async_add_entities.assert_called_once_with([sensor_instance])
+    MockFactory.assert_called_once_with(coordinator_instance, entry)
+    async_add_entities.assert_called_once_with(sensor_instances)
 
 # TODO: Fix test
 # @pytest.mark.asyncio

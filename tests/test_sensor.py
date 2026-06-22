@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from custom_components.ffagent_connector.sensor import async_setup_entry
 from custom_components.ffagent_connector.sensor import get_active_mission_status
 from custom_components.ffagent_connector.sensor import request_new_token
+from custom_components.ffagent_connector.sensor_entity import FFAgentMissionSensor, get_first_mission
 from types import SimpleNamespace
 
 @pytest.mark.asyncio
@@ -123,3 +124,128 @@ async def test_get_active_mission_status_api_error():
   with patch("aiohttp.ClientSession", return_value=mock_client_session):
     result = await get_active_mission_status(hass, entry)
     assert result == {}
+
+
+# --- Tests for opener_info extra_state_attributes ---
+
+def _make_opener_sensor(coordinator_data):
+  """Helper to create an opener_info sensor with given coordinator data."""
+  coordinator = MagicMock()
+  coordinator.data = coordinator_data
+  entry = MagicMock()
+  entry.data = {"username": "testuser"}
+  sensor = FFAgentMissionSensor(coordinator, entry, "opener_info", "Opener Info")
+  return sensor
+
+
+def test_opener_info_extra_attributes_with_multiple_openers():
+  """Test that openerInformation is split into individual entries."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": "eMID - FF Ottobrunn (Dienststelle)\neMID - Schleife 24677\nTETRA Callout - FW OTOBN_7 - FR"
+      }
+    }]
+  }
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs["openers"] == [
+    "eMID - FF Ottobrunn (Dienststelle)",
+    "eMID - Schleife 24677",
+    "TETRA Callout - FW OTOBN_7 - FR",
+  ]
+  assert attrs["openers_count"] == 3
+  assert attrs["last_opener"] == "TETRA Callout - FW OTOBN_7 - FR"
+  assert attrs["openers_filtered"] == [
+    "eMID - FF Ottobrunn (Dienststelle)",
+    "eMID - Schleife 24677",
+    "TETRA Callout - FW OTOBN_7 - FR",
+  ]
+
+
+def test_opener_info_extra_attributes_filters_tetra_sds():
+  """Test that TETRA SDS entries are filtered from openers_filtered."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": "TETRA SDS - Funkmelder\neMID - Schleife 24677\nTETRA SDS - Dienststelle"
+      }
+    }]
+  }
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs["openers_count"] == 3
+  assert attrs["openers"] == [
+    "TETRA SDS - Funkmelder",
+    "eMID - Schleife 24677",
+    "TETRA SDS - Dienststelle",
+  ]
+  assert attrs["openers_filtered"] == ["eMID - Schleife 24677"]
+
+
+def test_opener_info_extra_attributes_no_mission():
+  """Test attributes when no mission is active."""
+  data = {"missionStatus": []}
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs == {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+
+
+def test_opener_info_extra_attributes_empty_opener_info():
+  """Test attributes when openerInformation is empty."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": ""
+      }
+    }]
+  }
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs == {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+
+
+def test_opener_info_extra_attributes_single_opener():
+  """Test attributes with a single opener entry."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": "eMID - FF Ottobrunn (Dienststelle)"
+      }
+    }]
+  }
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs["openers"] == ["eMID - FF Ottobrunn (Dienststelle)"]
+  assert attrs["openers_count"] == 1
+  assert attrs["last_opener"] == "eMID - FF Ottobrunn (Dienststelle)"
+  assert attrs["openers_filtered"] == ["eMID - FF Ottobrunn (Dienststelle)"]
+
+
+def test_non_opener_sensor_has_empty_attributes():
+  """Test that non-opener_info sensors return empty attributes."""
+  coordinator = MagicMock()
+  coordinator.data = {
+    "missionStatus": [{
+      "status": "ACTIVE",
+      "isAutoReply": False,
+      "mission": {"openerInformation": "something"}
+    }]
+  }
+  entry = MagicMock()
+  entry.data = {"username": "testuser"}
+  sensor = FFAgentMissionSensor(coordinator, entry, "status", "Status")
+  assert sensor.extra_state_attributes == {}

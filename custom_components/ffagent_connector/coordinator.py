@@ -27,7 +27,6 @@ class FFAgentDataCoordinator(DataUpdateCoordinator):
 
   async def _async_update_data(self):
     """Hole Daten von der FF-Agent API."""
-    url = f"{BASE_URL}/app/v8/MobileService/activeMissionStatus?includeInfo=1"
     headers = {
       "Authorization": f"ACCESS-TOKEN {self.access_token}",
       "Content-Type": "application/json",
@@ -35,9 +34,38 @@ class FFAgentDataCoordinator(DataUpdateCoordinator):
 
     try:
       async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
+        # Fetch active mission status
+        status_url = f"{BASE_URL}/app/v8/MobileService/activeMissionStatus?includeInfo=1"
+        async with session.get(status_url, headers=headers) as resp:
           if resp.status != 200:
             raise UpdateFailed(f"Fehler beim Abruf der Daten: {resp.status}")
-          return await resp.json()
+          data = await resp.json()
+
+        # Fetch mission alarms if there's an active mission
+        missions = (data or {}).get("missionStatus", [])
+        alarms = []
+        if missions:
+          mission_guid = missions[0].get("mission", {}).get("guid")
+          if mission_guid:
+            alarms = await self._fetch_mission_alarms(session, headers, mission_guid)
+
+        data["missionAlarms"] = alarms
+        return data
+
+    except UpdateFailed:
+      raise
     except Exception as e:
       raise UpdateFailed(f"API Fehler: {e}")
+
+  async def _fetch_mission_alarms(self, session, headers, mission_guid):
+    """Hole die Alarmauslöser für eine Mission."""
+    url = f"{BASE_URL}/app/v8/MobileService/missionAlarms?missionGuid={mission_guid}"
+    try:
+      async with session.get(url, headers=headers) as resp:
+        if resp.status != 200:
+          _LOGGER.warning("Fehler beim Abruf der Alarmauslöser: %s", resp.status)
+          return []
+        return await resp.json()
+    except Exception as e:
+      _LOGGER.warning("Fehler beim Abruf der Alarmauslöser: %s", e)
+      return []

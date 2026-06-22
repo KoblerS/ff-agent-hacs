@@ -91,8 +91,27 @@ class FFAgentMissionSensor(CoordinatorEntity, SensorEntity):
 
   @property
   def extra_state_attributes(self):
-    # Optionally, add more context if needed
-    return {}
+    if self.attribute != "opener_info":
+      return {}
+
+    data = self.coordinator.data or {}
+    m, mission = get_first_mission(data)
+    if m is None or mission is None:
+      return {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+
+    opener_info = mission.get("openerInformation", "")
+    if not opener_info:
+      return {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+
+    openers = [o.strip() for o in opener_info.split("\n") if o.strip()]
+    openers_filtered = [o for o in openers if "TETRA SDS" not in o]
+
+    return {
+      "openers": openers,
+      "openers_count": len(openers),
+      "openers_filtered": openers_filtered,
+      "last_opener": openers[-1] if openers else None,
+    }
 
 # Factory to create all sensors for a user
 def create_ffagent_sensors(coordinator, entry):

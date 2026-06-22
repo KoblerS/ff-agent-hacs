@@ -138,16 +138,37 @@ def _make_opener_sensor(coordinator_data):
   return sensor
 
 
-def test_opener_info_extra_attributes_with_multiple_openers():
-  """Test that openerInformation is split into individual entries."""
+def test_opener_info_from_mission_alarms_api():
+  """Test that detailed missionAlarms data is used when available."""
   data = {
     "missionStatus": [{
       "status": "REQUESTED",
       "isAutoReply": False,
       "mission": {
-        "openerInformation": "eMID - FF Musterstadt (Dienststelle)\neMID - Schleife 10001\nTETRA Callout - FW MUSTER_1 - FR"
+        "guid": "abc-123",
+        "openerInformation": "eMID - FF Musterstadt (Dienststelle)\neMID - Schleife 10001"
       }
-    }]
+    }],
+    "missionAlarms": [
+      {
+        "alarmDate": "2026-06-22T16:31:54+0200",
+        "alarmedGroups": "Admins, Kommandanten",
+        "creationType": "eMID",
+        "openingInfo": "FF Musterstadt (Dienststelle)"
+      },
+      {
+        "alarmDate": "2026-06-22T16:31:54+0200",
+        "alarmedGroups": "Admins, Kommandanten",
+        "creationType": "eMID",
+        "openingInfo": "Schleife 10001"
+      },
+      {
+        "alarmDate": "2026-06-22T16:31:57+0200",
+        "alarmedGroups": "Admins, Kommandanten",
+        "creationType": "TETRA Callout",
+        "openingInfo": "FW MUSTER_1 - FR"
+      }
+    ]
   }
   sensor = _make_opener_sensor(data)
   attrs = sensor.extra_state_attributes
@@ -159,6 +180,11 @@ def test_opener_info_extra_attributes_with_multiple_openers():
   ]
   assert attrs["openers_count"] == 3
   assert attrs["last_opener"] == "TETRA Callout - FW MUSTER_1 - FR"
+  assert attrs["openers_detailed"] == [
+    {"time": "2026-06-22T16:31:54+0200", "type": "eMID", "info": "FF Musterstadt (Dienststelle)", "groups": "Admins, Kommandanten"},
+    {"time": "2026-06-22T16:31:54+0200", "type": "eMID", "info": "Schleife 10001", "groups": "Admins, Kommandanten"},
+    {"time": "2026-06-22T16:31:57+0200", "type": "TETRA Callout", "info": "FW MUSTER_1 - FR", "groups": "Admins, Kommandanten"},
+  ]
   assert attrs["openers_filtered"] == [
     "eMID - FF Musterstadt (Dienststelle)",
     "eMID - Schleife 10001",
@@ -166,16 +192,34 @@ def test_opener_info_extra_attributes_with_multiple_openers():
   ]
 
 
-def test_opener_info_extra_attributes_filters_tetra_sds():
+def test_opener_info_filters_tetra_sds_from_alarms():
   """Test that TETRA SDS entries are filtered from openers_filtered."""
   data = {
     "missionStatus": [{
       "status": "REQUESTED",
       "isAutoReply": False,
-      "mission": {
-        "openerInformation": "TETRA SDS - Funkmelder\neMID - Schleife 10001\nTETRA SDS - Dienststelle"
+      "mission": {"guid": "abc-123", "openerInformation": ""}
+    }],
+    "missionAlarms": [
+      {
+        "alarmDate": "2026-06-22T16:31:54+0200",
+        "alarmedGroups": "Admins",
+        "creationType": "TETRA SDS",
+        "openingInfo": "Funkmelder"
+      },
+      {
+        "alarmDate": "2026-06-22T16:31:54+0200",
+        "alarmedGroups": "Admins",
+        "creationType": "eMID",
+        "openingInfo": "Schleife 10001"
+      },
+      {
+        "alarmDate": "2026-06-22T16:31:57+0200",
+        "alarmedGroups": "Admins",
+        "creationType": "TETRA SDS",
+        "openingInfo": "Dienststelle"
       }
-    }]
+    ]
   }
   sensor = _make_opener_sensor(data)
   attrs = sensor.extra_state_attributes
@@ -189,17 +233,61 @@ def test_opener_info_extra_attributes_filters_tetra_sds():
   assert attrs["openers_filtered"] == ["eMID - Schleife 10001"]
 
 
-def test_opener_info_extra_attributes_no_mission():
-  """Test attributes when no mission is active."""
-  data = {"missionStatus": []}
+def test_opener_info_fallback_to_opener_information_string():
+  """Test fallback to openerInformation when missionAlarms is empty."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": "eMID - FF Musterstadt (Dienststelle)\neMID - Schleife 10001\nTETRA Callout - FW MUSTER_1 - FR"
+      }
+    }],
+    "missionAlarms": []
+  }
   sensor = _make_opener_sensor(data)
   attrs = sensor.extra_state_attributes
 
-  assert attrs == {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+  assert attrs["openers"] == [
+    "eMID - FF Musterstadt (Dienststelle)",
+    "eMID - Schleife 10001",
+    "TETRA Callout - FW MUSTER_1 - FR",
+  ]
+  assert attrs["openers_count"] == 3
+  assert attrs["openers_detailed"] == []
+  assert attrs["last_opener"] == "TETRA Callout - FW MUSTER_1 - FR"
 
 
-def test_opener_info_extra_attributes_empty_opener_info():
-  """Test attributes when openerInformation is empty."""
+def test_opener_info_fallback_filters_tetra_sds():
+  """Test that TETRA SDS is filtered in fallback mode too."""
+  data = {
+    "missionStatus": [{
+      "status": "REQUESTED",
+      "isAutoReply": False,
+      "mission": {
+        "openerInformation": "TETRA SDS - Funkmelder\neMID - Schleife 10001\nTETRA SDS - Dienststelle"
+      }
+    }],
+    "missionAlarms": []
+  }
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs["openers_count"] == 3
+  assert attrs["openers_filtered"] == ["eMID - Schleife 10001"]
+
+
+def test_opener_info_no_mission():
+  """Test attributes when no mission is active."""
+  data = {"missionStatus": [], "missionAlarms": []}
+  sensor = _make_opener_sensor(data)
+  attrs = sensor.extra_state_attributes
+
+  assert attrs == {"openers": [], "openers_detailed": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+
+
+def test_opener_info_empty_opener_info_and_no_alarms():
+  """Test attributes when openerInformation is empty and no alarms."""
   data = {
     "missionStatus": [{
       "status": "REQUESTED",
@@ -207,16 +295,17 @@ def test_opener_info_extra_attributes_empty_opener_info():
       "mission": {
         "openerInformation": ""
       }
-    }]
+    }],
+    "missionAlarms": []
   }
   sensor = _make_opener_sensor(data)
   attrs = sensor.extra_state_attributes
 
-  assert attrs == {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+  assert attrs == {"openers": [], "openers_detailed": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
 
 
-def test_opener_info_extra_attributes_single_opener():
-  """Test attributes with a single opener entry."""
+def test_opener_info_no_mission_alarms_key():
+  """Test fallback when missionAlarms key is missing entirely (API error)."""
   data = {
     "missionStatus": [{
       "status": "REQUESTED",
@@ -229,10 +318,10 @@ def test_opener_info_extra_attributes_single_opener():
   sensor = _make_opener_sensor(data)
   attrs = sensor.extra_state_attributes
 
+  # Falls back to openerInformation string
   assert attrs["openers"] == ["eMID - FF Musterstadt (Dienststelle)"]
   assert attrs["openers_count"] == 1
-  assert attrs["last_opener"] == "eMID - FF Musterstadt (Dienststelle)"
-  assert attrs["openers_filtered"] == ["eMID - FF Musterstadt (Dienststelle)"]
+  assert attrs["openers_detailed"] == []
 
 
 def test_non_opener_sensor_has_empty_attributes():
@@ -243,7 +332,8 @@ def test_non_opener_sensor_has_empty_attributes():
       "status": "ACTIVE",
       "isAutoReply": False,
       "mission": {"openerInformation": "something"}
-    }]
+    }],
+    "missionAlarms": []
   }
   entry = MagicMock()
   entry.data = {"username": "testuser"}

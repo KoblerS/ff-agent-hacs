@@ -97,17 +97,54 @@ class FFAgentMissionSensor(CoordinatorEntity, SensorEntity):
     data = self.coordinator.data or {}
     m, mission = get_first_mission(data)
     if m is None or mission is None:
-      return {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+      return {"openers": [], "openers_detailed": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
 
+    # Try detailed alarms from missionAlarms API
+    alarms = data.get("missionAlarms", [])
+    if alarms:
+      return self._attributes_from_alarms(alarms)
+
+    # Fallback: split openerInformation string
     opener_info = mission.get("openerInformation", "")
     if not opener_info:
-      return {"openers": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
+      return {"openers": [], "openers_detailed": [], "openers_count": 0, "openers_filtered": [], "last_opener": None}
 
     openers = [o.strip() for o in opener_info.split("\n") if o.strip()]
     openers_filtered = [o for o in openers if "TETRA SDS" not in o]
 
     return {
       "openers": openers,
+      "openers_detailed": [],
+      "openers_count": len(openers),
+      "openers_filtered": openers_filtered,
+      "last_opener": openers[-1] if openers else None,
+    }
+
+  def _attributes_from_alarms(self, alarms):
+    """Build attributes from detailed missionAlarms API response."""
+    openers = []
+    openers_detailed = []
+    openers_filtered = []
+
+    for alarm in alarms:
+      creation_type = alarm.get("creationType", "")
+      opening_info = alarm.get("openingInfo", "")
+      label = f"{creation_type} - {opening_info}" if creation_type and opening_info else (creation_type or opening_info)
+
+      openers.append(label)
+      openers_detailed.append({
+        "time": alarm.get("alarmDate", ""),
+        "type": creation_type,
+        "info": opening_info,
+        "groups": alarm.get("alarmedGroups", ""),
+      })
+
+      if "TETRA SDS" not in creation_type:
+        openers_filtered.append(label)
+
+    return {
+      "openers": openers,
+      "openers_detailed": openers_detailed,
       "openers_count": len(openers),
       "openers_filtered": openers_filtered,
       "last_opener": openers[-1] if openers else None,
